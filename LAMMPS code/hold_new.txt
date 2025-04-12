@@ -1,0 +1,81 @@
+
+# Input file for annealing simulation
+
+variable element string 'Ti'							  
+variable datafile string 'YBCO.936000.221.data'    
+variable pairstyle string 'eam/fs'
+variable potential string '../../../Ti_v2.eam.fs'
+
+						
+variable  initialT equal 611						
+variable  finalT equal 611
+variable  Tseed equal 18							
+
+variable  relaxSteps equal 5000 						 
+variable  heatSteps   equal 30000
+variable  dump equal "v_heatSteps/100"  						 
+variable  write_data equal "v_heatSteps/50"
+# ------------------------ INITIALIZATION ----------------------------
+log log.heating2
+echo log  									  
+units 		metal
+dimension	3
+boundary	p	p	p
+atom_style	charge
+
+#----------------------- READ DATA  --------------------------------
+read_data       ${datafile}							  
+
+
+# ------------------------ FORCE FIELDS ------------------------------
+pair_style hybrid/overlay coul/long 12 table linear 12000 pppm
+pair_coeff   *    *    coul/long
+pair_coeff 1 1  table TABLE_s Ba-Ba
+pair_coeff 1 2  table TABLE_s Ba-Y
+pair_coeff 1 3  table TABLE_s Ba-Cu
+pair_coeff 1 4  table TABLE_s Ba-O
+pair_coeff 2 2  table TABLE_s Y-Y
+pair_coeff 2 3  table TABLE_s Y-Cu
+pair_coeff 2 4  table TABLE_s Y-O
+pair_coeff 3 3  table TABLE_s Cu-Cu
+pair_coeff 3 4  table TABLE_s Cu-O
+pair_coeff 4 4  table TABLE_s O-O
+
+#Set the masses (1=Ba, 2=Y, 3=Cu, 4=O)
+mass 1 137.327
+mass 2 88.90585
+mass 3 63.546
+mass 4 15.999
+
+neighbor 0.6 bin
+#neigh_modify delay 10
+neigh_modify delay 0 every 1 check yes
+
+#Define atom groups
+group Barium type 1
+group Ytterium type 2
+group Copper type 3
+group Oxygen type 4
+
+kspace_style    pppm 0.00001
+neigh_modify    delay 0 every 1 check yes
+
+# ------------------------- SETTINGS ---------------------------------
+thermo ${dump}                                                                    
+timestep       0.002								   # units = metal, ps e.g. .5 fs
+thermo_style custom step temp vol press pe ke etotal cella cellb cellc 
+thermo 100
+
+#---------------------------equil ------------------------------------
+velocity       all create ${initialT} ${Tseed} mom yes 				   # linear mom of ensemble -> zero
+fix            1 all nvt temp ${initialT} ${initialT} $(dt*100) 
+run      ${relaxSteps} 
+
+reset_timestep 0
+#-------------------------- heating ---------------------------------
+unfix    1
+fix      1 all nvt temp ${initialT} ${finalT} $(dt*100) 
+dump     1 all custom ${dump} dump*.data id type x y z				  
+run      ${heatSteps}
+
+write_data   YBCO.${initialT}.${finalT}.221.data
